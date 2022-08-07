@@ -49,12 +49,12 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }},${{ secrets.REGISTRY_SERVER }}/${{ inputs.project}}:latest
-      # - 
-      #   name: Request approval
-      #   uses: trstringer/manual-approval@v1
-      #   timeout-minutes: 60
-      #   with:
-      #     secret: ${{ github.TOKEN }}
-      #     approvers: ititandev
-      #     issue-title: "Require approval to deploy ${{ env.PROJECT_FULLNAME }} version ${{steps.version.outputs.version}}"
-      #     minimum-approvals: 1   
+      - 
+        name: Request approval
+        uses: trstringer/manual-approval@v1
+        timeout-minutes: 60
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: ititandev
+          issue-title: "Require approval to deploy ${{ env.PROJECT_FULLNAME }} version ${{steps.version.outputs.version}}"
+          minimum-approvals: 1   
