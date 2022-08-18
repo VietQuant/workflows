@@ -42,7 +42,7 @@ jobs:
         run: |
           echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
           echo "TAG=${{ steps.version.outputs.version }}-`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
-          echo "NAMESPACE=`grep -e '^namespace' echoserver.yaml | awk '{print $2}'`" >> $GITHUB_ENV
+          echo "NAMESPACE=`grep -e '^namespace' deploy/echoserver.yaml | awk '{print $2}'`" >> $GITHUB_ENV
       -
         name: Build and Push
         uses: docker/build-push-action@v3
