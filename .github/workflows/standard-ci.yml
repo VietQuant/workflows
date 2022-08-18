@@ -49,6 +49,11 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }},${{ secrets.REGISTRY_SERVER }}/${{ inputs.project}}:latest
+      - 
+        uses: azure/setup-helm@v3
+        with:
+          version: '<version>' # default is latest (stable)
+          token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
       # - 
       #   name: Request approval
       #   uses: trstringer/manual-approval@v1
