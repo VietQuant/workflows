@@ -42,6 +42,7 @@ jobs:
         run: |
           echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
           echo "TAG=${{ steps.version.outputs.version }}-`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
+          echo "NAMESPACE=`grep -e '^namespace' echoserver.yaml | awk '{print $2}'" >> $GITHUB_ENV
       -
         name: Build and Push
         uses: docker/build-push-action@v3
@@ -54,6 +55,11 @@ jobs:
         with:
           version: '3.9.0' # default is latest (stable)
           token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
+      - 
+        name: Helm deploy
+        run: |
+          helm login {{ secrets.REGISTRY_SERVER }} -u {{ secrets.HELM_USERNAME }} -p {{ secrets.HELM_PASSWORD }}
+          helm upgrade {{ inputs.project }} -i -f deploy/{{ inputs.project }}.yaml oci://pysparks.azurecr.io/chart/common --version {{ secrets.COMMON_CHART_VERSION }}
       # - 
       #   name: Request approval
       #   uses: trstringer/manual-approval@v1
