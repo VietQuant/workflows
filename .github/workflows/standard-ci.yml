@@ -57,10 +57,12 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
       - 
         name: Helm deploy
+        env:
+          HELM_KUBECONFIG: ${{ secrets.HELM_KUBECONFIG }}
         run: |
           helm registry login pysparks.azurecr.io -u ${{ secrets.HELM_USERNAME }} -p ${{ secrets.HELM_PASSWORD }}
           mkdir -p ~/.kube
-          echo ${{ secrets.HELM_KUBECONFIG }} > ~/.kube/config
+          printf "$HELM_KUBECONFIG" > ~/.kube/config
           helm upgrade ${{ inputs.project }} -i -f deploy/${{ inputs.project }}.yaml oci://pysparks.azurecr.io/chart/common --version ${{ secrets.COMMON_CHART_VERSION }} -n ${{ env.NAMESPACE }}
       # - 
       #   name: Request approval
