@@ -9,6 +9,10 @@ on:
       module: 
         required: true
         type: string
+      dockerfile:
+        required: false
+        type: string
+        default: 'Dockerfile'
     secrets:
       REGISTRY_SERVER:
         required: true
@@ -52,6 +56,7 @@ jobs:
         with:
           context: .
           push: true
+          file: ${{ inputs.dockerfile }}
           tags: ${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }},${{ secrets.REGISTRY_SERVER }}/${{ inputs.project}}:latest
       - 
         uses: azure/setup-helm@v3
