@@ -75,7 +75,7 @@ jobs:
           helm registry login pysparks.azurecr.io -u ${{ secrets.HELM_USERNAME }} -p ${{ secrets.HELM_PASSWORD }}
           mkdir -p ~/.kube
           printf "$HELM_KUBECONFIG" > ~/.kube/config
-          helm upgrade ${{ inputs.module }} -i -f deploy/${{ inputs.module }}.yaml oci://pysparks.azurecr.io/chart/common --version ${{ secrets.COMMON_CHART_VERSION }} -n ${{ env.NAMESPACE }} --set image=${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }}
+          helm upgrade ${{ inputs.module }} -i -f deploy/${{ inputs.module }}.yaml oci://pysparks.azurecr.io/chart/common --version ${{ secrets.COMMON_CHART_VERSION }} -n ${{ env.NAMESPACE }} --set image=${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }} --set project=${{ inputs.project }}
       # - 
       #   name: Request approval
       #   uses: trstringer/manual-approval@v1
