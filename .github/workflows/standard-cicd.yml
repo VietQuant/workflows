@@ -80,7 +80,7 @@ jobs:
           MODULES=${{ inputs.module }}
           for MODULE in ${MODULES//,/ }; do
             NAMESPACE=`grep -e '^namespace' deploy/${MODULE}.yaml | awk '{print $2}'`
-            helm upgrade $MODULE -i -f deploy/${MODULE}.yaml oci://pysparks.azurecr.io/chart/common --version ${{ secrets.COMMON_CHART_VERSION }} -n $NAMESPACE --set image=${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }} --set project=${{ inputs.project }} --set module=$MODULE
+            helm upgrade $MODULE -i -f deploy/${MODULE}.yaml oci://pysparks.azurecr.io/chart/common --version ${{ secrets.COMMON_CHART_VERSION }} -n $NAMESPACE --set image=${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }} --set project=${{ inputs.project }} --set module=$MODULE --set repo=${GITHUB_REPOSITORY}
           done
       # - 
       #   name: Request approval
