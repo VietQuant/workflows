@@ -81,4 +81,4 @@ jobs:
           repo: VietQuant/gitops
           ref: main
           token: ${{ secrets.PAT }}
-          inputs: '{"cluster": "${{ inputs.cluster }}", "module": "${{ inputs.module }}", "actor": "${{ github.actor }}", "image": "${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }}"}'
+          inputs: '{"cluster": "${{ inputs.cluster }}", "project": "${{ inputs.project }}", "module": "${{ inputs.module }}", "actor": "${{ github.actor }}", "image": "${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }}"}'
