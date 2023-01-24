@@ -63,6 +63,7 @@ jobs:
           build-args: |
             PYPI_USERNAME=${{ secrets.PYPI_USERNAME }}
             PYPI_PASSWORD=${{ secrets.PYPI_PASSWORD }}
+            MODULE=${{ inputs.module }}
           tags: ${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }},${{ secrets.REGISTRY_SERVER }}/${{ inputs.project}}:latest
       - 
         uses: azure/setup-helm@v3
