@@ -65,6 +65,8 @@ jobs:
             PYPI_PASSWORD=${{ secrets.PYPI_PASSWORD }}
             MODULE=${{ inputs.module }}
           tags: ${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }},${{ secrets.REGISTRY_SERVER }}/${{ inputs.project}}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - 
         uses: azure/setup-helm@v3
         with:
