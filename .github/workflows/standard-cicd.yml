@@ -65,6 +65,7 @@ jobs:
           push: true
           file: ${{ inputs.dockerfile }}
           build-args: |
+            REGISTRY_SERVER=${{ secrets.REGISTRY_SERVER }}
             PYPI_USERNAME=${{ secrets.PYPI_USERNAME }}
             PYPI_PASSWORD=${{ secrets.PYPI_PASSWORD }}
             MODULE=${{ inputs.module }}
