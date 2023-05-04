@@ -1,4 +1,4 @@
-name: Pysparks CI/CD
+name: PiCap CI/CD
 
 on:
   workflow_call:
