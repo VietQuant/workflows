@@ -25,6 +25,10 @@ on:
         required: false
         type: string
         default: ''
+      build-only:
+        required: false
+        type: boolean
+        default: false
     secrets:
       REGISTRY_SERVER:
         required: true
@@ -78,11 +82,13 @@ jobs:
           cache-to: type=gha,mode=max
       - 
         uses: azure/setup-helm@v3
+        if: ${{ ! inputs.build-only }}
         with:
           version: '3.9.0' # default is latest (stable)
           token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
       - 
         name: Helm deploy
+        if: ${{ ! inputs.build-only }}
         env:
           HELM_KUBECONFIG: ${{ secrets.HELM_KUBECONFIG }}
         run: |
