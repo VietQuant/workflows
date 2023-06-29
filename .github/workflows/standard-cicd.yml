@@ -112,7 +112,7 @@ jobs:
             RELEASE=`basename ${MODULE}`
             [ -z "$IMAGE" ] && IMAGE=${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }}
             echo "======================= Deploying $RELEASE to $NAMESPACE ======================="
-            helm upgrade $RELEASE -i $SET_SHARED_MODULES -f deploy/${MODULE}.yaml oci://pysparks.azurecr.io/chart/common --version ${{ secrets.COMMON_CHART_VERSION }} -n $NAMESPACE --set image=$IMAGE --set project=${{ inputs.project }} --set module=$MODULE --set repo=${GITHUB_REPOSITORY} --kube-context=${{ inputs.cluster }}
+            helm upgrade $RELEASE -i $SET_SHARED_MODULES -f deploy/${MODULE}.yaml oci://pysparks.azurecr.io/chart/common --version ${{ secrets.COMMON_CHART_VERSION }} -n $NAMESPACE --set image=$IMAGE --set project=${{ inputs.project }} --set module=$MODULE --set repo=${GITHUB_REPOSITORY} --set cluster=${{ inputs.cluster }} --kube-context=${{ inputs.cluster }} 
           done
       # - 
       #   name: Request approval
