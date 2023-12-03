@@ -1,0 +1,141 @@
+name: PiCap CI/CD
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: true
+        type: string
+      module: 
+        required: true
+        type: string
+      dockerfile:
+        required: false
+        type: string
+        default: 'Dockerfile'
+      context:
+        required: false
+        type: string
+        default: '.'
+      cluster:
+        required: false
+        type: string
+        default: 'office'
+      shared-module:
+        required: false
+        type: string
+        default: ''
+      deploy-only:
+        required: false
+        type: boolean
+        default: false
+      build-only:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      REGISTRY_SERVER:
+        required: true
+      REGISTRY_USERNAME:
+        required: true
+      REGISTRY_PASSWORD:
+        required: true
+
+jobs:
+  cicd:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Set up Docker Buildx
+        if: ${{ ! inputs.deploy-only }}
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Login to Registry
+        if: ${{ ! inputs.deploy-only }}
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.REGISTRY_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - 
+        name: Generate Tag Version
+        if: ${{ ! inputs.deploy-only }}
+        id: version
+        uses: paulhatch/semantic-version@v4.0.2
+        with:
+          bump_each_commit: true
+      -
+        name: Generate Image Tag
+        if: ${{ ! inputs.deploy-only }}
+        run: |
+          echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
+          echo "TAG=${{ steps.version.outputs.version }}-`echo ${GITHUB_SHA} | cut -c1-7`" >> $GITHUB_ENV
+      -
+        name: Build and Push
+        if: ${{ ! inputs.deploy-only }}
+        uses: docker/build-push-action@v3
+        with:
+          context: ${{ inputs.context }}
+          push: true
+          file: ${{ inputs.dockerfile }}
+          build-args: |
+            REGISTRY_SERVER=${{ secrets.REGISTRY_SERVER }}
+            PYPI_USERNAME=${{ secrets.PYPI_USERNAME }}
+            PYPI_PASSWORD=${{ secrets.PYPI_PASSWORD }}
+            MODULE=${{ inputs.module }}
+          tags: ${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }},${{ secrets.REGISTRY_SERVER }}/${{ inputs.project}}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - 
+        uses: azure/setup-helm@v3
+        if: ${{ ! inputs.build-only }}
+        with:
+          version: '3.9.0' # default is latest (stable)
+          token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
+      -
+        uses: boostport/setup-cloudflare-warp@v1
+        if: ${{ ! inputs.build-only }}
+        with:
+          organization: picap
+          auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
+          auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+      - 
+        name: Helm deploy
+        if: ${{ ! inputs.build-only }}
+        env:
+          HELM_KUBECONFIG: ${{ secrets.HELM_KUBECONFIG2 }}
+        run: |
+          helm registry login pysparks.azurecr.io -u ${{ secrets.HELM_USERNAME }} -p ${{ secrets.HELM_PASSWORD }}
+          mkdir -p ~/.kube
+          printf "$HELM_KUBECONFIG" > ~/.kube/config
+          SHARED_MODULES=${{ inputs.shared-module }}
+          for SHARED_MODULE in ${SHARED_MODULES//,/ }; do
+            SET_SHARED_MODULES="$SET_SHARED_MODULES -f deploy/$SHARED_MODULE.yaml"
+          done
+          MODULES=${{ inputs.module }}
+          for MODULE in ${MODULES//,/ }; do
+            NAMESPACE=`grep -e '^namespace' deploy/${MODULE}.yaml | awk '{print $2}'`
+            if [ -z "$NAMESPACE" ]; then
+              for SHARED_MODULE in ${SHARED_MODULES//,/ }; do
+                N=`grep -e '^namespace' deploy/${SHARED_MODULE}.yaml | awk '{print $2}'`
+                [ -n "$N" ] && NAMESPACE=$N
+              done
+            fi
+            IMAGE=`grep -e '^image' deploy/${MODULE}.yaml | awk '{print $2}'`
+            RELEASE=`basename ${MODULE}`
+            [ -z "$IMAGE" ] && IMAGE=${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }}
+            echo "======================= Deploying $RELEASE to cluster '${{ inputs.cluster }}', namespace '$NAMESPACE' ======================="
+            helm upgrade $RELEASE -i $SET_SHARED_MODULES -f deploy/${MODULE}.yaml oci://pysparks.azurecr.io/chart/common --version ${{ secrets.COMMON_CHART_VERSION }} -n $NAMESPACE --set image=$IMAGE --set project=${{ inputs.project }} --set module=$MODULE --set repo=${GITHUB_REPOSITORY} --set cluster=${{ inputs.cluster }} --kube-context=${{ inputs.cluster }} 
+          done
+      # - 
+      #   name: Request approval
+      #   uses: trstringer/manual-approval@v1
+      #   timeout-minutes: 60
+      #   with:
+      #     secret: ${{ github.TOKEN }}
+      #     approvers: ititandev
+      #     issue-title: "Require approval to deploy ${{ env.PROJECT_FULLNAME }} version ${{steps.version.outputs.version}}"
+      #     minimum-approvals: 1   
