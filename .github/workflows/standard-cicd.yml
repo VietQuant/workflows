@@ -97,14 +97,22 @@ jobs:
         with:
           version: '3.9.0' # default is latest (stable)
           token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
+      # -
+      #   uses: boostport/setup-cloudflare-warp@v1
+      #   if: ${{ ! inputs.build-only }}
+      #   with:
+      #     version: 2025.7.176.0
+      #     organization: picap
+      #     auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
+      #     auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
       -
-        uses: boostport/setup-cloudflare-warp@v1
+        uses: oHTGo/setup-cloudflare-warp-action@master
         if: ${{ ! inputs.build-only }}
         with:
           organization: picap
           auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
           auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
-      - 
+      -
         name: Helm deploy
         if: ${{ ! inputs.build-only }}
         env:
