@@ -106,12 +106,12 @@ jobs:
       #     auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
       #     auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
       -
-        uses: oHTGo/setup-cloudflare-warp-action@master
+        uses: Boostport/setup-cloudflare-warp@v1
         if: ${{ ! inputs.build-only }}
         with:
           organization: picap
-          auth-client-id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
-          auth-client-secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+          auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
+          auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
       -
         name: Helm deploy
         if: ${{ ! inputs.build-only }}
