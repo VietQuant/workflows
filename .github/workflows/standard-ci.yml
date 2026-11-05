@@ -21,6 +21,16 @@ on:
          required: false
          type: string
          default: 'office-test'
+      secret-scan:
+        description: 'Run gitleaks secret scan on the source tree'
+        required: false
+        type: boolean
+        default: true
+      secret-scan-comment:
+        description: 'Comment gitleaks findings on the PR (sticky) or on the commit'
+        required: false
+        type: boolean
+        default: true
     secrets:
       REGISTRY_SERVER:
         required: true
@@ -30,6 +40,109 @@ on:
         required: true
 
 jobs:
+  secret-scan:
+    name: Secret scan
+    # Runs in parallel with the build job, warn only: never affects the CI/CD result
+    continue-on-error: true
+    if: ${{ inputs.secret-scan }}
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Secret scan (gitleaks)
+        id: gitleaks
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+          GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+          SCAN_MODE: dir
+          # PR: use the branch head commit, not the temporary merge commit
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          # Install pinned gitleaks binary (MIT, no license / no scan quota)
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP" gitleaks
+          mkdir -p "$RUNNER_TEMP/gitleaks-out"
+          REPORT="$RUNNER_TEMP/gitleaks-out/gitleaks-report.json"
+          COMMENT="$RUNNER_TEMP/gitleaks-out/comment.md"
+          # .gitleaks.toml / .gitleaksignore in repo root are honored
+          set +e
+          "$RUNNER_TEMP/gitleaks" "$SCAN_MODE" . --redact --no-banner --report-format json --report-path "$REPORT" --exit-code 2
+          RC=$?
+          set -e
+          if [ "$RC" -ne 0 ] && [ "$RC" -ne 2 ]; then
+            echo "::error::gitleaks failed with exit code $RC"
+            exit "$RC"
+          fi
+          COUNT=$(jq 'length' "$REPORT")
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          BLOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob"
+          {
+            echo "<!-- gitleaks-report -->"
+            if [ "$COUNT" -eq 0 ]; then
+              echo "### :white_check_mark: Gitleaks: no secrets found"
+              echo ""
+              echo "Commit \`${COMMIT_SHA::7}\` · [workflow run](${RUN_URL})"
+            else
+              echo "### :rotating_light: Gitleaks: $COUNT potential secret(s) found"
+              echo ""
+              echo "Commit \`${COMMIT_SHA::7}\` · scan mode \`${SCAN_MODE}\` · [workflow run](${RUN_URL})"
+              echo ""
+              echo "| Rule | Location | Commit | Fingerprint |"
+              echo "|---|---|---|---|"
+              jq -r --arg blob "$BLOB_URL" --arg sha "$COMMIT_SHA" '.[] | "| \(.RuleID) | [\(.File):\(.StartLine)](\($blob)/\(if .Commit == "" then $sha else .Commit end)/\(.File)#L\(.StartLine)) | \(if .Commit == "" then "-" else .Commit[0:7] end) | `\(.Fingerprint)` |"' "$REPORT"
+              echo ""
+              echo "Secrets are redacted. If a secret is real, **rotate it** — deleting it from code is not enough, it stays in git history."
+              echo "False positive? Add the fingerprint to \`.gitleaksignore\` or an allowlist in \`.gitleaks.toml\`."
+            fi
+          } > "$COMMENT"
+          sed '1d' "$COMMENT" >> "$GITHUB_STEP_SUMMARY"
+          [ "$COUNT" -eq 0 ] && exit 0
+          # Warn only: never fails the pipeline
+          jq -r '.[] | "::warning file=\(.File),line=\(.StartLine)::gitleaks \(.RuleID)"' "$REPORT"
+      -
+        name: Upload gitleaks report
+        if: ${{ always() && steps.gitleaks.outputs.count != '' && steps.gitleaks.outputs.count != '0' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: ${{ runner.temp }}/gitleaks-out/gitleaks-report.json
+          retention-days: 14
+      -
+        name: Comment gitleaks result
+        # Needs caller permissions: pull-requests: write (PR) / contents: write (commit comment).
+        # Never fails the pipeline if the token lacks permission.
+        if: ${{ always() && inputs.secret-scan-comment && steps.gitleaks.outputs.count != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COUNT: ${{ steps.gitleaks.outputs.count }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          BODY="$RUNNER_TEMP/gitleaks-out/comment.md"
+          MARKER='<!-- gitleaks-report -->'
+          if [ -n "$PR_NUMBER" ]; then
+            # PR: keep a single sticky comment, update it on every run
+            ID=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
+                  --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | tail -1)
+            if [ -n "$ID" ]; then
+              gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${ID}" -F body=@"$BODY" >/dev/null \
+                && echo "Updated PR comment $ID" || echo "::warning::Cannot update PR comment (need pull-requests: write)"
+            elif [ "$COUNT" != "0" ]; then
+              gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -F body=@"$BODY" >/dev/null \
+                && echo "Created PR comment" || echo "::warning::Cannot comment on PR (need pull-requests: write)"
+            fi
+          elif [ "$COUNT" != "0" ]; then
+            # push / dispatch: comment on the commit, only when something is found
+            gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -F body=@"$BODY" >/dev/null \
+              && echo "Created commit comment" || echo "::warning::Cannot comment on commit (need contents: write)"
+          fi
+          exit 0
+
   ci:
     runs-on: ubuntu-latest
     steps:
