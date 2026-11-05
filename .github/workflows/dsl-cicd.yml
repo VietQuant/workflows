@@ -79,6 +79,8 @@ jobs:
           GITLEAKS_VERSION: '8.30.1'
           GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
           SCAN_MODE: dir
+          # PR: use the branch head commit, not the temporary merge commit
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           # Install pinned gitleaks binary (MIT, no license / no scan quota)
@@ -106,15 +108,15 @@ jobs:
             if [ "$COUNT" -eq 0 ]; then
               echo "### :white_check_mark: Gitleaks: no secrets found"
               echo ""
-              echo "Commit \`${GITHUB_SHA::7}\` · [workflow run](${RUN_URL})"
+              echo "Commit \`${COMMIT_SHA::7}\` · [workflow run](${RUN_URL})"
             else
               echo "### :rotating_light: Gitleaks: $COUNT potential secret(s) found"
               echo ""
-              echo "Commit \`${GITHUB_SHA::7}\` · scan mode \`${SCAN_MODE}\` · [workflow run](${RUN_URL})"
+              echo "Commit \`${COMMIT_SHA::7}\` · scan mode \`${SCAN_MODE}\` · [workflow run](${RUN_URL})"
               echo ""
               echo "| Rule | Location | Commit | Fingerprint |"
               echo "|---|---|---|---|"
-              jq -r --arg blob "$BLOB_URL" --arg sha "$GITHUB_SHA" '.[] | "| \(.RuleID) | [\(.File):\(.StartLine)](\($blob)/\(if .Commit == "" then $sha else .Commit end)/\(.File)#L\(.StartLine)) | \(if .Commit == "" then "-" else .Commit[0:7] end) | `\(.Fingerprint)` |"' "$REPORT"
+              jq -r --arg blob "$BLOB_URL" --arg sha "$COMMIT_SHA" '.[] | "| \(.RuleID) | [\(.File):\(.StartLine)](\($blob)/\(if .Commit == "" then $sha else .Commit end)/\(.File)#L\(.StartLine)) | \(if .Commit == "" then "-" else .Commit[0:7] end) | `\(.Fingerprint)` |"' "$REPORT"
               echo ""
               echo "Secrets are redacted. If a secret is real, **rotate it** — deleting it from code is not enough, it stays in git history."
               echo "False positive? Add the fingerprint to \`.gitleaksignore\` or an allowlist in \`.gitleaks.toml\`."
