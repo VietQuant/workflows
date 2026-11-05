@@ -38,7 +38,8 @@ jobs:
         name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: ${{ inputs.mode == 'git' && 0 || 1 }}
+          # strings on purpose: numeric 0 is falsy in expressions and would fall through to 1
+          fetch-depth: ${{ inputs.mode == 'git' && '0' || '1' }}
       -
         name: Secret scan (gitleaks)
         id: gitleaks
