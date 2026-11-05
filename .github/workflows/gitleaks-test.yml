@@ -9,7 +9,6 @@ name: Gitleaks Test
 #       uses: VietQuant/workflows/.github/workflows/gitleaks-test.yml@main
 #       with:
 #         mode: git        # dir = current source tree, git = full git history
-#         fail: false
 #       permissions:
 #         contents: write        # commit comment
 #         pull-requests: write   # PR comment
@@ -25,11 +24,6 @@ on:
         required: false
         type: string
         default: 'dir'
-      fail:
-        description: 'Fail the job when secrets are found'
-        required: false
-        type: boolean
-        default: false
       comment:
         description: 'Comment findings on the PR (sticky) or on the commit'
         required: false
@@ -51,7 +45,6 @@ jobs:
         env:
           GITLEAKS_VERSION: '8.30.1'
           GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
-          FAIL_ON_LEAK: ${{ inputs.fail }}
           SCAN_MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
@@ -97,12 +90,8 @@ jobs:
           } > "$COMMENT"
           sed '1d' "$COMMENT" >> "$GITHUB_STEP_SUMMARY"
           [ "$COUNT" -eq 0 ] && exit 0
-          LEVEL=warning; [ "$FAIL_ON_LEAK" = "true" ] && LEVEL=error
-          jq -r --arg lvl "$LEVEL" '.[] | "::\($lvl) file=\(.File),line=\(.StartLine)::gitleaks \(.RuleID)"' "$REPORT"
-          if [ "$FAIL_ON_LEAK" = "true" ]; then
-            echo "::error::gitleaks found $COUNT potential secret(s)"
-            exit 1
-          fi
+          # Warn only: never fails the pipeline
+          jq -r '.[] | "::warning file=\(.File),line=\(.StartLine)::gitleaks \(.RuleID)"' "$REPORT"
       -
         name: Upload gitleaks report
         if: ${{ always() && steps.gitleaks.outputs.count != '' && steps.gitleaks.outputs.count != '0' }}

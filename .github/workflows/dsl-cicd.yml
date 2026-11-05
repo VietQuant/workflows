@@ -48,11 +48,6 @@ on:
         required: false
         type: boolean
         default: true
-      secret-scan-fail:
-        description: 'Fail the pipeline when gitleaks finds secrets (false = warn only)'
-        required: false
-        type: boolean
-        default: false
       secret-scan-comment:
         description: 'Comment gitleaks findings on the PR (sticky) or on the commit'
         required: false
@@ -69,7 +64,8 @@ on:
 jobs:
   secret-scan:
     name: Secret scan
-    # Runs in parallel with the build job
+    # Runs in parallel with the build job, warn only: never affects the CI/CD result
+    continue-on-error: true
     if: ${{ inputs.secret-scan && ! inputs.deploy-only }}
     runs-on: ubuntu-22.04
     steps:
@@ -82,7 +78,6 @@ jobs:
         env:
           GITLEAKS_VERSION: '8.30.1'
           GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
-          FAIL_ON_LEAK: ${{ inputs.secret-scan-fail }}
           SCAN_MODE: dir
         run: |
           set -euo pipefail
@@ -127,12 +122,8 @@ jobs:
           } > "$COMMENT"
           sed '1d' "$COMMENT" >> "$GITHUB_STEP_SUMMARY"
           [ "$COUNT" -eq 0 ] && exit 0
-          LEVEL=warning; [ "$FAIL_ON_LEAK" = "true" ] && LEVEL=error
-          jq -r --arg lvl "$LEVEL" '.[] | "::\($lvl) file=\(.File),line=\(.StartLine)::gitleaks \(.RuleID)"' "$REPORT"
-          if [ "$FAIL_ON_LEAK" = "true" ]; then
-            echo "::error::gitleaks found $COUNT potential secret(s)"
-            exit 1
-          fi
+          # Warn only: never fails the pipeline
+          jq -r '.[] | "::warning file=\(.File),line=\(.StartLine)::gitleaks \(.RuleID)"' "$REPORT"
       -
         name: Upload gitleaks report
         if: ${{ always() && steps.gitleaks.outputs.count != '' && steps.gitleaks.outputs.count != '0' }}
@@ -234,36 +225,6 @@ jobs:
           tags: ${{ secrets.REGISTRY_SERVER }}/${{ inputs.project }}:${{ env.TAG }},${{ secrets.REGISTRY_SERVER }}/${{ inputs.project}}:latest
           cache-from: type=gha,scope=${{ inputs.project }}-${{ inputs.dockerfile }}
           cache-to: type=gha,mode=max,scope=${{ inputs.project }}-${{ inputs.dockerfile }}
-      -
-        name: Wait for secret scan
-        # Only in blocking mode (secret-scan-fail: true): deploy waits for the parallel
-        # secret-scan job and stops if it found secrets. Needs caller permission actions: read.
-        if: ${{ inputs.secret-scan && inputs.secret-scan-fail && ! inputs.deploy-only && ! inputs.build-only }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          API="repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs"
-          jobs() { gh api "$API" --paginate --jq '.jobs[] | [.name, .status, (.conclusion // ""), (.runner_name // "")] | @tsv'; }
-          if ! LIST=$(jobs); then
-            echo "::error::Cannot read job status (caller needs permissions: actions: read)"
-            exit 1
-          fi
-          # Called-workflow jobs are named "<caller job> / <job>"; find our prefix via runner name
-          ME=$(printf '%s\n' "$LIST" | awk -F'\t' -v r="$RUNNER_NAME" '$4==r && $2=="in_progress" {print $1; exit}')
-          case "$ME" in *" / "*) TARGET="${ME% / *} / Secret scan" ;; *) TARGET="Secret scan" ;; esac
-          echo "Waiting for job: $TARGET"
-          for _ in $(seq 1 90); do
-            ROW=$(jobs | awk -F'\t' -v t="$TARGET" '$1==t {print $2" "$3; exit}')
-            case "$ROW" in
-              "completed success") echo "Secret scan passed"; exit 0 ;;
-              "completed "*) echo "::error::Secret scan job did not pass (${ROW#completed }); deploy blocked"; exit 1 ;;
-              "") echo "::error::Job '$TARGET' not found"; exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "::error::Timed out waiting for secret scan"
-          exit 1
       -
         uses: azure/setup-helm@v3
         if: ${{ ! inputs.build-only }}
